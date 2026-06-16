@@ -538,5 +538,115 @@ export function getRandomColor() {
   );
   return colors[Math.floor(Math.random() * colors.length)];
 }
+import { EmbedBuilder } from 'discord.js';
+import { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } from '@discordjs/voice';
+import botConfig, { getColor } from '../config/botConfig.js';
+import { mcgiPlaylist } from '../utils/mcgiSongs.js';
+
+export default {
+    name: 'playmcgi',
+    category: 'community',
+    async execute(message, args) {
+        const voiceChannel = message.member.voice.channel;
+        const selection = args[0]?.toLowerCase();
+
+        // ==========================================
+        // 1. DISPLAY DIRECTORY LIST (Kapag walang sinabing kanta o '?playmcgi list')
+        // ==========================================
+        if (!selection || selection === 'list') {
+            const listEmbed = new EmbedBuilder()
+                .setTitle('🎶 MCGI Songs of Praise Directory')
+                .setDescription('Gamitin ang command na: `?playmcgi [song-key]` para mag-play sa Voice Channel.\n\nHere are the available tracks:')
+                .setColor(getColor('embeds.colors.info'))
+                .setFooter({ text: `${botConfig.embeds.footer.text} • SolorCrest Anu na!` })
+                .setTimestamp();
+
+            // Pagbubukod-bukod ng mga kanta para malinis tingnan ang Embed
+            let hymnsField = "";
+            let kdrField = "";
+            let asopField = "";
+
+            Object.entries(mcgiPlaylist).forEach(([key, song]) => {
+                const songLine = `\`${key}\` - **${song.title}**\n`;
+                
+                // I-sort base sa group ng kanta gamit ang keys
+                if (["iglesia", "dakila", "pagasa", "magwawagi", "ingatan", "paraiso", "years"].includes(key)) {
+                    hymnsField += songLine;
+                } else if (["pagibig", "kaibigan", "hiling", "sige", "arawgabi", "langit", "panalangin"].includes(key)) {
+                    kdrField += songLine;
+                } else {
+                    asopField += songLine;
+                }
+            });
+
+            listEmbed.addFields(
+                { name: '🏛️ Classic Hymns & Congregational', value: hymnsField || 'Walang kanta.', inline: false },
+                { name: '✍️ Kuya Daniel Razon Compositions', value: kdrField || 'Walang kanta.', inline: false },
+                { name: '🏆 ASOP Winners & Entries', value: asopField || 'Walang kanta.', inline: false }
+            );
+
+            return message.reply({ embeds: [listEmbed] });
+        }
+
+        // ==========================================
+        // 2. PLAY AUDIO LOGIC
+        // ==========================================
+        // Siguraduhing nasa Voice Channel ang nag-command
+        if (!voiceChannel) {
+            return message.reply('⚠️ Kailangan mo munang pumasok sa isang Voice Channel bago patakbuhin ang command na ito!');
+        }
+
+        // Suriin kung valid ang kanta na hiningi ng user
+        const targetSong = mcgiPlaylist[selection];
+        if (!targetSong) {
+            return message.reply(`❌ Hindi nahanap ang song key na iyan. I-type ang \`?playmcgi list\` para makita ang tamang mga code.`);
+        }
+
+        const processingMessage = await message.reply(`🔄 Inihahanda ang audio stream para sa **${targetSong.title}**...`);
+
+        try {
+            // Kumonekta sa Voice Channel
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: message.guild.id,
+                adapterCreator: message.guild.voiceAdapterCreator,
+            });
+
+            // I-setup ang Player at Audio Resource
+            const player = createAudioPlayer();
+            const resource = createAudioResource(targetSong.url, { inlineVolume: true });
+            
+            resource.volume.setVolume(0.60); // Itakda ang volume sa ligtas na antas (60%)
+            player.play(resource);
+            connection.subscribe(player);
+
+            // Mag-send ng "Now Playing" Embed card gamit ang moderation/success color
+            const playingEmbed = new EmbedBuilder()
+                .setTitle('🎚️ Now Playing: MCGI Audio Module')
+                .setDescription(`Kasalukuyang pinapatugtog ang **${targetSong.title}** sa <#${voiceChannel.id}>`)
+                .addFields({ name: 'Detalye ng Awit', value: `*${targetSong.desc}*` })
+                .setColor(getColor('embeds.colors.success'))
+                .setFooter({ text: 'SolorCrest Anu na!' })
+                .setTimestamp();
+
+            await processingMessage.edit({ content: ' ', embeds: [playingEmbed] });
+
+            // Kusang aalis ang bot kapag natapos na ang kanta
+            player.on(AudioPlayerStatus.Idle, () => {
+                connection.destroy();
+            });
+
+            // Saluhin ang error kung masira man ang stream connection
+            player.on('error', error => {
+                console.error(`Audio engine connection failure: ${error.message}`);
+                connection.destroy();
+            });
+
+        } catch (error) {
+            console.error('Voice playback setup error:', error);
+            await processingMessage.edit('⚠️ Nagka-error sa pagsisimula ng voice connection. Siguraduhing may `Connect` at `Speak` permissions ang bot!');
+        }
+    }
+};
 
 export default botConfig;
