@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger.js';
-export const botConfig = {
-  
+
+import botConfig, { validateConfig } from "./botConfig.js";
   // =========================
   // BOT PRESENCE (what users see under the bot name)
   // =========================
