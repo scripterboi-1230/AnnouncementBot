@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger.js';
 
-import botConfig, { validateConfig } from "./botConfig.js";
+import { BotConfig as botConfig, validateConfig } from "./bot.js";
   // =========================
   // BOT PRESENCE (what users see under the bot name)
   // =========================
